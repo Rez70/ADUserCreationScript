@@ -38,7 +38,7 @@
 
 
 .LINK
-    https://link-to-related-docs-or-repo
+    https://github.com/Rez70/ADUserCreationScript.git 
 #>
 
 #Parameters
@@ -46,7 +46,6 @@ param(
     [Parameter(Mandatory=$true, HelpMessage='Enter the path to the CSV file.')]
     [String]$CSVFilePath
 )
-
 
 #Functions
 
