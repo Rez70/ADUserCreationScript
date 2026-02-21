@@ -55,26 +55,48 @@ function Add-NewADUser {
     [PSCustomObject]$User
     )
 
+    # Checks if an account with the specified SamAccountName already exists
     if (Get-ADUser -Filter "SamAccountName -eq '$($User.username)'") {
         Write-Warning "A account with the name $($User.username) already exists in Active Directory."
     }
     else {
-        $ouExists = Get-ADOrganizationalUnit -identity $User.ou -ErrorAction SilentlyContinue
-        
+        try {
+            # Attempts to retrieve the OU by distinguished name
+            $ouExists = Get-ADOrganizationalUnit -identity $User.ou -ErrorAction SilentlyContinue 
+        }
+        catch {
+            $ouExists = $null
+        }
+        # Assign the specified path to a variable
         $parentPath = $User.ou
-
+        
+        # If the OU does not exist, create the OU hierarchy
         if (-not $ouExists) {
+            # Splits the path, trims extra spaces, and removes the domain components and "OU=" prefix
             $ouSplits = ($User.ou -split "," | Where-Object {$_ -notmatch "DC="}) -replace "OU=", "" | ForEach-Object {$_.Trim()}
-            
+            # Reverse the order of the array
+            [array]::Reverse($ouSplits)
+            # Assign the domain componets of the path to a variable
             $parentPath = "DC=abhiraj,DC=local"
 
+            
+            # Iterates through each OU in $ouSplits
             foreach ($ou in $ouSplits) {
-                $newOU = New-ADOrganizationalUnit -Name $ou -Path $parentPath -PassThru
+                try {
+                    # Creates the missing OUs
+                    $newOU = New-ADOrganizationalUnit -Name $ou -Path $parentPath -PassThru
 
-                $parentPath = $newOU.DistinguishedName
+                    # Updates the path with the new OU
+                    $parentPath = $newOU.DistinguishedName
+                }
+                catch {
+                    # If OU already exists, manually rebuild the DN and continue
+                    $parentPath = "OU=$ou,$parentPath"
+                }
+                
             }
         }
-
+        # Creates the new Active Directory user account
         New-ADUser `
         -Name "$($User.firstname) $($User.lastname)" `
         -SamAccountName $User.username `
@@ -97,18 +119,24 @@ function Add-ADUserToGroups {
     [PSCustomObject]$User
     )
 
+    # splits the groups provided in the CSV file and trims the whitespaces
     $groups = $User.groups -split ',' | ForEach-Object {$_.Trim()}
 
+    # Iterates through the collection of group names
     foreach ($group in $groups) {
+        # Checks if the groups exists using their name
         $groupExists = Get-ADGroup -Filter "Name -eq '$group'" -ErrorAction SilentlyContinue
 
+        # Creates the group if it doesn't exist
         if (-not $groupExists) {
             New-ADGroup "$group" -GroupScope Global -Path "DC=abhiraj,DC=local" -Verbose
         }
 
+        # Checks if the user account is already a member of the group
         if (Get-ADGroupMember -identity $group | Where-Object {$_.SamAccountName -eq $User.username}) {
                 Write-Host "$($User.username) is already a member of $group"
         }
+        # Adds the user account to the group if not already a member
         else {
             Add-ADGroupMember -identity $group -Members $User.username -Verbose     
         }         
@@ -120,15 +148,18 @@ function Add-ADUserToGroups {
 
 Import-Module ActiveDirectory
 
+# Throws an error if the CSV file path is incorrect
 if (-not(Test-Path $CSVFilePath)) { 
     Write-Error "CSV file not found in path: $CSVFilePath"
     exit
 }
 
+# Assigns the CSV file path to a variable
 $ADUsers = Import-Csv $CSVFilePath
 
+# Creates an account for each user in the CSV file and assigns them to their specified groups
 foreach($User in $ADUsers) {
     Add-NewADUser -User $User
-    Add-ADUserToGroups -user $User
+    Add-ADUserToGroups -User $User
 
 }
