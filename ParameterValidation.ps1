@@ -33,10 +33,9 @@
     Last Modified: 2026-03-16
     Change Log:
         1.0 - Initial release
-        
 
 .LINK
-    https://link-to-related-docs-or-repo
+    https://github.com/Rez70/ParameterValidation.git
 #>
 
 #Functions
